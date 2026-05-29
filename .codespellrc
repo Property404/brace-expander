@@ -1,0 +1,7 @@
+# vim: syntax=toml
+# Codespell config file
+# Just run "codespell" in the root directory
+
+[codespell]
+skip = ./target
+ignore-words-list = crate

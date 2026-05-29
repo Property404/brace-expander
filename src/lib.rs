@@ -121,7 +121,7 @@ pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
 }
 
 impl BraceExpander {
-    /// Ignore parse failures instead of erroring out, makeing `expand()` infallible. This is how
+    /// Ignore parse failures instead of erroring out, making `expand()` infallible. This is how
     /// Bash behaves.
     ///
     /// The default is `false`
