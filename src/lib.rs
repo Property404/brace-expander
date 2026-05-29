@@ -328,9 +328,11 @@ impl BraceExpander {
         let tokens_barrel = tokens_barrel.split(|token| token.kind == TokenKind::Whitespace);
 
         for tokens in tokens_barrel {
-            let tokens = tokens.iter().cloned();
-            let ast = self.parse_section(tokens)?;
-            expansions.extend(self.expand_ast(&ast));
+            if !tokens.is_empty() {
+                let tokens = tokens.iter().cloned();
+                let ast = self.parse_section(tokens)?;
+                expansions.extend(self.expand_ast(&ast));
+            }
         }
 
         Ok(expansions)
@@ -374,5 +376,8 @@ mod tests {
         test_tv(&be, "{a,}{1..2}", &["a1", "a2", "1", "2"]);
         test_tv(&be, "a b", &["a", "b"]);
         test_tv(&be, "{1..2} {a,b}c", &["1", "2", "ac", "bc"]);
+        test_tv(&be, "", &[]);
+        test_tv(&be, "  ", &[]);
+        test_tv(&be, "a  ", &["a"]);
     }
 }
