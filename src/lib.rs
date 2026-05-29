@@ -1,337 +1,147 @@
+//! Library to support bash-like brace expansions
+//!
+//! ```
+//! use brace_expander::BraceExpander;
+//! let be = BraceExpander::default();
+//!
+//! // Basic cartesian product
+//! assert_eq!(be.expand("{a,b}").unwrap().join(" "), "a b");
+//! assert_eq!(be.expand("hello_{a,b}").unwrap().join(" "), "hello_a hello_b");
+//! assert_eq!(be.expand("G{o,u}{b,g}").unwrap().join(" "), "Gob Gog Gub Gug");
+//!
+//! // Nested product
+//! assert_eq!(be.expand("{{a,b}{c,{e,f}},g}").unwrap().join(" "), "ac ae af bc be bf g");
+//!
+//! // Numeric expansion
+//! assert_eq!(be.expand("thing{1..3}").unwrap().join(" "), "thing1 thing2 thing3");
+//!
+//! // Or backwards
+//! assert_eq!(be.expand("thing{3..1}").unwrap().join(" "), "thing3 thing2 thing1");
+//!
+//! // char expansion
+//! assert_eq!(be.expand("{A..C}").unwrap().join(" "), "A B C");
+//!
+//! // Step by
+//! assert_eq!(be.expand("{A..E..2}").unwrap().join(" "), "A C E");
+//!
+//! // Leading zeroes
+//! assert_eq!(be.expand("Agent{006..008}").unwrap().join(" "), "Agent006 Agent007 Agent008");
+//!
+//! ```
+#![warn(missing_docs)]
+#![forbid(unsafe_code)]
 use either::Either;
 mod error;
 use error::Error;
+mod tokenizer;
+use tokenizer::{Token, TokenKind};
+mod parser;
+use parser::AstToken;
 
-/// Brace expander
-#[derive(Clone)]
-pub struct BraceExpander {
+#[derive(Debug, Clone)]
+struct Options {
     strict: bool,
 }
 
-impl Default for BraceExpander {
+impl Default for Options {
     fn default() -> Self {
-        BraceExpander::new()
+        Self { strict: true }
     }
 }
 
-impl BraceExpander {
-    pub const fn new() -> Self {
-        BraceExpander { strict: true }
-    }
+/// Brace expander
+#[derive(Clone, Default)]
+pub struct BraceExpander {
+    options: Options,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum TokenKind {
-    Start,
-    End,
-    Comma,
-    Ellipses,
-    Whitespace,
-    Text,
-}
-
-#[derive(Debug)]
-struct PartialToken {
-    kind: TokenKind,
-    pos: usize,
-}
-
-#[derive(Debug, Clone)]
-struct Token<'a> {
-    kind: TokenKind,
-    pos: usize,
-    span: &'a str,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum AstToken {
-    Text(String),
-    CommaExpansion(Vec<Vec<AstToken>>),
-    NumericExpansion {
-        start: i32,
-        end: i32,
-        // TODO: leading zeros
-        // TODO: step
-    }, // TODO: char expansion
-}
-
-impl PartialToken {
-    fn with_span<'a>(self, span: &'a str, end: usize) -> Token<'a> {
-        debug_assert!(self.pos < end);
-        Token {
-            kind: self.kind,
-            pos: self.pos,
-            span: &span[self.pos..end],
-        }
-    }
-}
-
-impl BraceExpander {
-    fn tokenize<'a>(&self, input: &'a str) -> Result<Vec<Token<'a>>, Error> {
-        let mut tokens = Vec::<Token>::new();
-        let mut token: Option<PartialToken> = None;
-        let mut brace_stack: u32 = 0;
-
-        let mut bytes = input.bytes().enumerate().peekable();
-        while let Some((pos, c)) = bytes.next() {
-            match c {
-                b'{' => {
-                    if let Some(token) = token.take() {
-                        tokens.push(token.with_span(input, pos));
-                    }
-                    brace_stack += 1;
-                    tokens.push(Token {
-                        kind: TokenKind::Start,
-                        pos,
-                        span: &input[pos..pos + 1],
-                    });
-                }
-                b'}' => {
-                    if let Some(token) = token.take() {
-                        tokens.push(token.with_span(input, pos));
-                    }
-                    brace_stack = brace_stack.saturating_sub(1);
-                    tokens.push(Token {
-                        kind: TokenKind::End,
-                        pos,
-                        span: &input[pos..pos + 1],
-                    });
-                }
-                b',' if brace_stack > 0 => {
-                    if let Some(token) = token.take() {
-                        tokens.push(token.with_span(input, pos));
-                    }
-                    tokens.push(Token {
-                        kind: TokenKind::Comma,
-                        pos,
-                        span: &input[pos..pos + 1],
-                    });
-                }
-                b'.' if brace_stack > 0
-                    && let Some((_, b'.')) = bytes.peek() =>
-                {
-                    bytes.next();
-                    if let Some(token) = token.take() {
-                        tokens.push(token.with_span(input, pos));
-                    }
-                    tokens.push(Token {
-                        kind: TokenKind::Ellipses,
-                        pos,
-                        span: &input[pos..pos + 2],
-                    });
-                }
-                b'\n' | b'\t' | b' ' | b'\r' => {
-                    if let Some(token) = token.take_if(|token| token.kind != TokenKind::Whitespace)
-                    {
-                        tokens.push(token.with_span(input, pos));
-                    }
-                    if token.is_none() {
-                        token = Some(PartialToken {
-                            kind: TokenKind::Whitespace,
-                            pos,
-                        });
-                    }
-                }
-                _ => {
-                    // Backslash escapes so we skip interpreting the next char
-                    if c == b'\\' {
-                        bytes.next();
-                    }
-                    if let Some(token) = token.take_if(|token| token.kind != TokenKind::Text) {
-                        tokens.push(token.with_span(input, pos));
-                    }
-                    if token.is_none() {
-                        token = Some(PartialToken {
-                            kind: TokenKind::Text,
-                            pos,
-                        });
-                    }
-                }
-            }
-        }
-        if let Some(token) = token.take() {
-            tokens.push(token.with_span(input, input.len()));
-        }
-
-        Ok(tokens)
-    }
-
-    fn parse_numeric_expansion<'a>(tokens: Vec<Token<'a>>) -> Result<AstToken, Error> {
-        let mut tokens = tokens.into_iter();
-        let Some(start) = tokens.next() else {
-            return Err(Error::new("Expansion missing starting token"));
-        };
-        let Some(end) = tokens.next() else {
-            return Err(Error::new("Numeric expansion missing end token"));
-        };
-
-        if tokens.next().is_some() {
-            todo!("This is not yet supported");
-        }
-
-        Ok(AstToken::NumericExpansion {
-            start: start.span.parse::<i32>().map_err(|_| {
-                Error::with_context("Numeric expansion start token is not a number", start)
-            })?,
-            end: end.span.parse::<i32>().map_err(|_| {
-                Error::with_context("Numeric expansion end token is not a number", end)
-            })?,
+// Perf: cartesian product is probably the biggest bottleneck
+fn cartesian_product<B>(list_a: Vec<String>, list_b: &[B]) -> Vec<String>
+where
+    B: AsRef<str>,
+{
+    list_a
+        .into_iter()
+        .flat_map(|s| std::iter::repeat_n(s, list_b.len()).zip(list_b.iter()))
+        .map(|(mut a, b)| {
+            a += b.as_ref();
+            a
         })
-    }
+        .collect()
+}
 
-    // Parse expansion
-    fn parse_expansion<'a, T>(&self, input: &mut T) -> Result<AstToken, Error>
-    where
-        T: Iterator<Item = Token<'a>>,
-    {
-        let mut can_be_numeric = true;
-        let mut found_comma = false;
-        let mut numexp_ast = Vec::<Token>::new();
-        let mut numexp_current: Option<Token> = None;
-
-        let mut comexp_ast = Vec::<Vec<AstToken>>::new();
-        let mut comexp_current = Vec::<AstToken>::new();
-
-        while let Some(token) = input.next() {
-            match token.kind {
-                TokenKind::Start => {
-                    can_be_numeric = false;
-                    comexp_current.push(self.parse_expansion(input)?);
+pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
+    let mut segments = vec![String::new()];
+    for token in input.iter() {
+        match token {
+            AstToken::Text(text) => {
+                segments = cartesian_product(segments, &[text]);
+            }
+            AstToken::NumericExpansion {
+                start,
+                end,
+                step,
+                leading_zeros,
+            } => {
+                let leading_zeroes = "0".repeat(*leading_zeros);
+                let range = if start <= end {
+                    Either::Left(*start..=*end)
+                } else {
+                    Either::Right((*end..=*start).rev())
                 }
-                TokenKind::End => {
-                    if found_comma {
-                        comexp_ast.push(comexp_current);
-                        return Ok(AstToken::CommaExpansion(comexp_ast));
-                    }
-                    if let Some(token) = numexp_current.take() {
-                        numexp_ast.push(token);
-                    }
-                    if can_be_numeric {
-                        match Self::parse_numeric_expansion(numexp_ast) {
-                            Ok(val) => {
-                                return Ok(val);
-                            }
-                            Err(err) => {
-                                if self.strict {
-                                    return Err(err);
-                                }
-                            }
-                        }
-                    }
-                    break;
+                .step_by(usize::from(*step))
+                .map(|int| format!("{leading_zeroes}{int}"))
+                .collect::<Vec<_>>();
+                segments = cartesian_product(segments, &range);
+            }
+            AstToken::CharExpansion { start, end, step } => {
+                let range = if start <= end {
+                    Either::Left(*start..=*end)
+                } else {
+                    Either::Right((*end..=*start).rev())
                 }
-                TokenKind::Comma => {
-                    can_be_numeric = false;
-                    found_comma = true;
-                    // perf: make this clone a swap
-                    comexp_ast.push(comexp_current.clone());
-                    comexp_current.clear();
-                }
-                TokenKind::Text | TokenKind::Ellipses => {
-                    if let Some(AstToken::Text(last)) = comexp_current.last_mut() {
-                        // Merge text
-                        *last += token.span;
-                    } else {
-                        comexp_current.push(AstToken::Text(token.span.into()));
-                    }
-
-                    if token.kind == TokenKind::Ellipses {
-                        if let Some(token) = numexp_current.take() {
-                            numexp_ast.push(token);
-                        } else {
-                            // Numeric expansion can't start with ellipses
-                            can_be_numeric = false;
-                        }
-                    } else {
-                        numexp_current = Some(token);
-                    }
-                }
-                TokenKind::Whitespace => {
-                    unreachable!("No whitespace allowed in this function");
-                }
+                .step_by(usize::from(*step))
+                .map(char::from)
+                // Bash replaces backslash with space in char expansions
+                .map(|c| if c == '\\' { ' ' } else { c })
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>();
+                segments = cartesian_product(segments, &range);
+            }
+            AstToken::CommaExpansion(asts) => {
+                segments = cartesian_product(
+                    segments,
+                    &asts.iter().flat_map(|v| expand_ast(v)).collect::<Vec<_>>(),
+                );
             }
         }
-        if self.strict {
-            return Err(Error::new("Failed to parse"));
-        }
-        todo!("Deal with inability to parse");
     }
 
-    // Parse section without whitespace
-    fn parse_section<'a, T>(&self, mut input: T) -> Result<Vec<AstToken>, Error>
-    where
-        T: Iterator<Item = Token<'a>>,
-    {
-        let mut ast = Vec::<AstToken>::new();
-        while let Some(token) = input.next() {
-            match token.kind {
-                TokenKind::Start => {
-                    ast.push(self.parse_expansion(&mut input)?);
-                }
-                TokenKind::Whitespace => {
-                    unreachable!("Whitespace not allowed at this level");
-                }
-                _ => {
-                    ast.push(AstToken::Text(token.span.into()));
-                }
-            }
-        }
-        Ok(ast)
+    segments
+}
+
+impl BraceExpander {
+    /// Ignore parse failures instead of erroring out, makeing `expand()` infallible. This is how
+    /// Bash behaves.
+    ///
+    /// The default is `false`
+    pub fn ignore_parse_failures(mut self, ignore_parse_failures: bool) -> Self {
+        self.options.strict = !ignore_parse_failures;
+        self
     }
 
-    pub(crate) fn expand_ast(&self, input: &[AstToken]) -> Vec<String> {
-        let mut segments = vec![String::new()];
-        for token in input.iter() {
-            match token {
-                AstToken::Text(text) => {
-                    for segment in &mut segments {
-                        *segment += text;
-                    }
-                }
-                AstToken::NumericExpansion { start, end } => {
-                    let mut new_segments = Vec::new();
-                    let range = if start <= end {
-                        Either::Left(*start..=*end)
-                    } else {
-                        Either::Right((*end..=*start).rev())
-                    };
-                    for segment in &segments {
-                        for i in range.clone() {
-                            let i = i.to_string();
-                            new_segments.push(segment.clone() + &i);
-                        }
-                    }
-                    std::mem::swap(&mut segments, &mut new_segments);
-                }
-                AstToken::CommaExpansion(asts) => {
-                    let mut new_segments = Vec::new();
-                    // Perf: just look at this mess
-                    for segment in &segments {
-                        for ast in asts {
-                            let ast = self.expand_ast(ast);
-                            for exp in &ast {
-                                new_segments.push(segment.clone() + exp);
-                            }
-                        }
-                    }
-                    std::mem::swap(&mut segments, &mut new_segments);
-                }
-            }
-        }
-
-        segments
-    }
-
+    /// Expand a string
     pub fn expand(&self, input: &str) -> Result<Vec<String>, Error> {
         let mut expansions = Vec::new();
-        let tokens_barrel = self.tokenize(input)?;
+        let tokens_barrel = tokenizer::tokenize(input);
         let tokens_barrel = tokens_barrel.split(|token| token.kind == TokenKind::Whitespace);
 
         for tokens in tokens_barrel {
             if !tokens.is_empty() {
-                let tokens = tokens.iter().cloned();
-                let ast = self.parse_section(tokens)?;
-                expansions.extend(self.expand_ast(&ast));
+                let ast = parser::parse_section(tokens, &self.options)?;
+                // Perf note: expansion takes MUCH longer than tokenization or parsing
+                // Start here for perf improvements
+                expansions.extend(expand_ast(&ast));
             }
         }
 
@@ -354,8 +164,7 @@ mod tests {
 
     #[test]
     fn expand() {
-        let be = BraceExpander::default();
-
+        let be = BraceExpander::default().ignore_parse_failures(false);
         test_tv(&be, "a", &["a"]);
         test_tv(&be, "a,4", &["a,4"]);
         test_tv(&be, "a..4", &["a..4"]);
@@ -382,5 +191,102 @@ mod tests {
         test_tv(&be, "} {1..2}", &["}", "1", "2"]);
         test_tv(&be, "{1..2}}", &["1}", "2}"]);
         test_tv(&be, "{1..2}..", &["1..", "2.."]);
+        test_tv(&be, "{1..3..1}", &["1", "2", "3"]);
+        test_tv(&be, "{1..3..0}", &["1", "2", "3"]);
+        test_tv(&be, "{1..3..-1}", &["1", "2", "3"]);
+        test_tv(&be, "{1..3..2}", &["1", "3"]);
+        test_tv(&be, "{1..3..3}", &["1"]);
+        test_tv(&be, "{3..1..3}", &["3"]);
+        test_tv(&be, "{1..03..2}", &["01", "03"]);
+        test_tv(&be, "{01..03..2}", &["01", "03"]);
+        test_tv(&be, "{01..00003..2}", &["00001", "00003"]);
+        test_tv(&be, "{1..3..002}", &["1", "3"]);
+        test_tv(&be, "{a..c}", &["a", "b", "c"]);
+        test_tv(&be, "{a..c..2}", &["a", "c"]);
+        test_tv(&be, "{c..a..2}", &["c", "a"]);
+        test_tv(&be, "{a..Z..2}", &["a", "_", "]", "["]);
+        test_tv(&be, "{Z..a..2}", &["Z", " ", "^", "`"]);
+        test_tv(&be, "{Z..a..2}", &["Z", " ", "^", "`"]);
+        test_tv(&be, "{0..-2}", &["0", "-1", "-2"]);
+        test_tv(&be, "{-1..-2}", &["-1", "-2"]);
+        test_tv(&be, "{-1..1}", &["-1", "0", "1"]);
+        test_tv(&be, "{1..-1}", &["1", "0", "-1"]);
+        test_tv(&be, "{-1..+1}", &["-1", "0", "1"]);
+        test_tv(
+            &be,
+            "{a,b}{c,d}{e,f}",
+            &["ace", "acf", "ade", "adf", "bce", "bcf", "bde", "bdf"],
+        );
+    }
+
+    #[test]
+    fn parse_failures() {
+        let tvs: &[(&str, &[&str])] = &[
+            ("{a..", &["{a.."]),
+            ("{", &["{"]),
+            ("{a}", &["{a}"]),
+            ("{a}{b,c}", &["{a}b", "{a}c"]),
+            ("{1..2..z}", &["{1..2..z}"]),
+            ("{1..z}", &["{1..z}"]),
+            ("{1..z}{,}", &["{1..z}", "{1..z}"]),
+            ("{1..}", &["{1..}"]),
+            ("{..}", &["{..}"]),
+            ("{{{", &["{{{"]),
+            ("{,{,{", &["{,{,{"]),
+        ];
+
+        // When strict mode is false, we ignore parse failures like bash
+        let be = BraceExpander::default().ignore_parse_failures(true);
+        for tv in tvs {
+            test_tv(&be, tv.0, tv.1);
+        }
+
+        // When strict mode is on, we error out
+        let be = BraceExpander::default().ignore_parse_failures(false);
+        for tv in tvs {
+            assert!(be.expand(tv.0).is_err());
+        }
+    }
+
+    #[test]
+    fn fuzz() {
+        use rand::prelude::*;
+        let mut rng = rand::rng();
+        fn build_fuzzy_string(rng: &mut rand::rngs::ThreadRng) -> String {
+            let length = rng.random_range(0..20);
+            let mut string = String::new();
+            for _ in 0..length {
+                let chars = [
+                    '\\',
+                    '{',
+                    '}',
+                    '.',
+                    ',',
+                    '\'',
+                    '"',
+                    ' ',
+                    '\t',
+                    '\r',
+                    '\n',
+                    rng.random(),
+                ];
+                string.push(*chars.choose(rng).unwrap());
+            }
+            string
+        }
+
+        let strict_be = BraceExpander::default().ignore_parse_failures(false);
+        let loose_be = BraceExpander::default().ignore_parse_failures(true);
+        for _ in 0..1000 {
+            let string = build_fuzzy_string(&mut rng);
+
+            // BraceExpander in loose mood shouldn't error at all, even on garbage
+            if let Err(err) = loose_be.expand(&string) {
+                panic!("Unexpected error on `{string}`: {err}");
+            }
+
+            // Just make sure we don't panic on strict
+            let _ = strict_be.expand(&string);
+        }
     }
 }

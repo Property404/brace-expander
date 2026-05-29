@@ -16,7 +16,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn with_context(message: &'static str, token: Token) -> Self {
+    pub(crate) fn with_context(message: &'static str, token: &Token) -> Self {
         Self {
             column: NonZeroUsize::new(token.pos.strict_add(1)),
             message,

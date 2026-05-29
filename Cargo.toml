@@ -1,7 +1,15 @@
 [package]
 name = "brace-expander"
-version = "0.1.0"
+authors = ["Property404 <DontEmailMeOrMySonEverAgain@example.com>"]
+description = "Brace expansion library"
+homepage = "https://github.com/Property404/brace-expander"
+repository = "https://github.com/Property404/brace-expander"
+license = "MIT OR Apache-2.0"
+version = "0.0.0"
 edition = "2024"
 
 [dependencies]
 either = "1.16.0"
+
+[dev-dependencies]
+rand = { version = "0.10.1", default-features = false , features = ["std", "thread_rng"]}
