@@ -90,7 +90,7 @@ impl BraceExpander {
                     if let Some(token) = token.take() {
                         tokens.push(token.with_span(input, pos));
                     }
-                    brace_stack = brace_stack.wrapping_sub(1);
+                    brace_stack = brace_stack.saturating_sub(1);
                     tokens.push(Token {
                         kind: TokenKind::End,
                         pos,
@@ -379,5 +379,8 @@ mod tests {
         test_tv(&be, "", &[]);
         test_tv(&be, "  ", &[]);
         test_tv(&be, "a  ", &["a"]);
+        test_tv(&be, "} {1..2}", &["}", "1", "2"]);
+        test_tv(&be, "{1..2}}", &["1}", "2}"]);
+        test_tv(&be, "{1..2}..", &["1..", "2.."]);
     }
 }
