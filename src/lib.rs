@@ -290,11 +290,11 @@ mod tests {
 
     #[test]
     fn backslash_behavior() {
-        let tvs: &[(&str, (&[&str], &[&str]))] = &[
-            ("{a,\\ }", (&["{a,\\", "}"], &["a", " "])),
-            ("\\{a,b}", (&["\\a", "\\b"], &["{a,b}"])),
-            ("_{a,\\ b}", (&["_{a,\\", "b}"], &["_a", "_ b"])),
-            ("\\\\", (&["\\\\"], &["\\"])),
+        let tvs: &[(&str, &[&str], &[&str])] = &[
+            ("{a,\\ }", &["{a,\\", "}"], &["a", " "]),
+            ("\\{a,b}", &["\\a", "\\b"], &["{a,b}"]),
+            ("_{a,\\ b}", &["_{a,\\", "b}"], &["_a", "_ b"]),
+            ("\\\\", &["\\\\"], &["\\"]),
         ];
         for tv in tvs {
             test_tv(
@@ -302,14 +302,14 @@ mod tests {
                     .ignore_parse_failures(true)
                     .interpret_backslashes(false),
                 tv.0,
-                tv.1.0,
+                tv.1,
             );
             test_tv(
                 &BraceExpander::new()
                     .ignore_parse_failures(true)
                     .interpret_backslashes(true),
                 tv.0,
-                tv.1.1,
+                tv.2,
             );
         }
     }
