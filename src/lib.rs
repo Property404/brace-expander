@@ -58,8 +58,8 @@ struct Options {
     ignore_parse_failures: bool,
 }
 
-impl Default for Options {
-    fn default() -> Self {
+impl Options {
+    const fn new() -> Self {
         Self {
             ignore_parse_failures: false,
         }
@@ -67,9 +67,15 @@ impl Default for Options {
 }
 
 /// Brace expander
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct BraceExpander {
     options: Options,
+}
+
+impl Default for BraceExpander {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // Perf: cartesian product is probably the biggest bottleneck
@@ -138,6 +144,15 @@ pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
 }
 
 impl BraceExpander {
+    /// Create a new default [BraceExpander] with default options
+    ///
+    /// This is the same as calling [Default::default()] but it is a const method
+    pub fn new() -> Self {
+        Self {
+            options: Options::new(),
+        }
+    }
+
     /// Ignore parse failures instead of erroring out, making the parsing stage infallible. This is
     /// how Bash behaves.
     ///

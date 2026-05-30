@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `BraceExpander::new()` for const construction
+
 ### Changed
 
 - Properly handle backslashes (`\{a,b}` => `{a,b}` instead of `\{a,b}`)
