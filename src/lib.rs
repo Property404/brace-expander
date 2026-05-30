@@ -1,6 +1,6 @@
 //! Library to support bash-like brace expansions
 //!
-//! [![Repository](https://img.shields.io/badge/github-brace--expander-/)](https://github.com/Property404/brace-expander)
+//! [![Repository](https://img.shields.io/badge/github-brace--expander-/)](https://github.com/Property402/brace-expander)
 //! [![crates.io](https://img.shields.io/crates/v/brace-expander.svg)](https://crates.io/crates/brace-expander)
 //! [![Documentation](https://docs.rs/brace-expander/badge.svg)](https://docs.rs/brace-expander)
 //!
@@ -53,21 +53,23 @@ use tokenizer::{Token, TokenKind};
 mod parser;
 use parser::AstToken;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct Options {
     ignore_parse_failures: bool,
+    interpret_backslashes: bool,
 }
 
 impl Options {
     const fn new() -> Self {
         Self {
             ignore_parse_failures: false,
+            interpret_backslashes: false,
         }
     }
 }
 
 /// Brace expander
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BraceExpander {
     options: Options,
 }
@@ -144,10 +146,11 @@ pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
 }
 
 impl BraceExpander {
-    /// Create a new default [BraceExpander] with default options
+    /// Create a new default [BraceExpander] with sensible options
     ///
     /// This is the same as calling [Default::default()] but it is a const method
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             options: Options::new(),
         }
@@ -156,16 +159,45 @@ impl BraceExpander {
     /// Ignore parse failures instead of erroring out, making the parsing stage infallible. This is
     /// how Bash behaves.
     ///
+    /// # Example
+    /// ```
+    /// # use brace_expander::BraceExpander;
+    /// let be = BraceExpander::new().ignore_parse_failures(false);
+    /// assert!(be.expand("{1...10}").is_err());
+    /// let be = be.ignore_parse_failures(true);
+    /// assert_eq!(be.expand("{1...10}").unwrap().join(" "), "{1...10}");
+    /// ```
+    ///
     /// Default: `false`
-    pub fn ignore_parse_failures(mut self, ignore_parse_failures: bool) -> Self {
-        self.options.ignore_parse_failures = ignore_parse_failures;
+    #[must_use]
+    pub const fn ignore_parse_failures(mut self, value: bool) -> Self {
+        self.options.ignore_parse_failures = value;
+        self
+    }
+
+    /// Interpret backslashes as a method of escaping a character as text. Enabling this makes the
+    /// tokenization process fallible (fails on backslash with nothing following it).
+    ///
+    /// # Example
+    /// ```
+    /// # use brace_expander::BraceExpander;
+    /// let be = BraceExpander::new().interpret_backslashes(false);
+    /// assert_eq!(be.expand("\\{a,b}").unwrap().join(" "), "\\a \\b");
+    /// let be = be.interpret_backslashes(true);
+    /// assert_eq!(be.expand("\\{a,b}").unwrap().join(" "), "{a,b}");
+    /// ```
+    ///
+    /// Default: `false`
+    #[must_use]
+    pub const fn interpret_backslashes(mut self, value: bool) -> Self {
+        self.options.interpret_backslashes = value;
         self
     }
 
     /// Expand a string
     pub fn expand(&self, input: &str) -> Result<Vec<String>, Error> {
         let mut expansions = Vec::new();
-        let tokens_barrel = tokenizer::tokenize(input)?;
+        let tokens_barrel = tokenizer::tokenize(input, &self.options)?;
         let tokens_barrel = tokens_barrel.split(|token| token.kind == TokenKind::Whitespace);
 
         for tokens in tokens_barrel {
@@ -185,13 +217,18 @@ impl BraceExpander {
 mod tests {
     use super::*;
 
-    fn test_tv(bc: &BraceExpander, input: &str, expected: &[&'static str]) {
-        let actual = bc.expand(input).unwrap();
+    fn test_tv(be: &BraceExpander, input: &str, expected: &[&'static str]) {
+        let actual = be.expand(input).unwrap();
         let expected = expected
             .iter()
             .map(|s| String::from(*s))
             .collect::<Vec<String>>();
-        assert_eq!(actual, expected);
+        if actual != expected {
+            panic!(
+                "{options:?}\nInput   : '{input}'\nExpected: {expected:?}\nActual  : {actual:?}",
+                options = be.options
+            );
+        }
     }
 
     #[test]
@@ -249,9 +286,32 @@ mod tests {
             "{a,b}{c,d}{e,f}",
             &["ace", "acf", "ade", "adf", "bce", "bcf", "bde", "bdf"],
         );
-        test_tv(&be, "\\{a,b}", &["{a,b}"]);
-        test_tv(&be, "_{a,\\ b}", &["_a", "_ b"]);
-        test_tv(&be, "\\\\", &["\\"]);
+    }
+
+    #[test]
+    fn backslash_behavior() {
+        let tvs: &[(&str, (&[&str], &[&str]))] = &[
+            ("{a,\\ }", (&["{a,\\", "}"], &["a", " "])),
+            ("\\{a,b}", (&["\\a", "\\b"], &["{a,b}"])),
+            ("_{a,\\ b}", (&["_{a,\\", "b}"], &["_a", "_ b"])),
+            ("\\\\", (&["\\\\"], &["\\"])),
+        ];
+        for tv in tvs {
+            test_tv(
+                &BraceExpander::new()
+                    .ignore_parse_failures(true)
+                    .interpret_backslashes(false),
+                tv.0,
+                tv.1.0,
+            );
+            test_tv(
+                &BraceExpander::new()
+                    .ignore_parse_failures(true)
+                    .interpret_backslashes(true),
+                tv.0,
+                tv.1.1,
+            );
+        }
     }
 
     #[test]
