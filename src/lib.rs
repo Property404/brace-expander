@@ -233,6 +233,7 @@ mod tests {
             &["ace", "acf", "ade", "adf", "bce", "bcf", "bde", "bdf"],
         );
         test_tv(&be, "\\{a,b}", &["{a,b}"]);
+        test_tv(&be, "_{a,\\ b}", &["_a", "_ b"]);
         test_tv(&be, "\\\\", &["\\"]);
     }
 
