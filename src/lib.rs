@@ -1,8 +1,8 @@
-//! Library to support bash-like brace expansions
-//!
 //! [![Repository](https://img.shields.io/badge/github-brace--expander-/)](https://github.com/Property404/brace-expander)
 //! [![crates.io](https://img.shields.io/crates/v/brace-expander.svg)](https://crates.io/crates/brace-expander)
 //! [![Documentation](https://docs.rs/brace-expander/badge.svg)](https://docs.rs/brace-expander)
+//!
+//! Library to support bash-like brace expansions
 //!
 //! ## Examples
 //!
