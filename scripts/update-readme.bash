@@ -9,7 +9,7 @@ main() {
     done
 
     echo -e "# brace-expander\n" > README.md
-    sed -n 's/^\/\/!//gp' src/lib.rs | sed 's/^ //g'  >> README.md
+    sed -n 's/^\/\/!//gp' src/lib.rs | sed 's/^ //g' >> README.md
 }
 
 main
