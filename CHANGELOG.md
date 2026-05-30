@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `BraceExpander::new()` for const construction
+- New option to enable/disable backslash interpretation
 
 ### Changed
 
 - Properly handle backslashes (`\{a,b}` => `{a,b}` instead of `\{a,b}`)
-    - Because of this, the tokenizer is now fallible
+- Tokenizer is now fallible
+- Incompatible changes to the error type
 
 ### Fixed
 
