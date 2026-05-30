@@ -5,7 +5,7 @@ description = "Brace expansion library"
 homepage = "https://github.com/Property404/brace-expander"
 repository = "https://github.com/Property404/brace-expander"
 license = "MIT OR Apache-2.0"
-version = "0.0.1"
+version = "0.0.2-pre"
 edition = "2024"
 
 [dependencies]
