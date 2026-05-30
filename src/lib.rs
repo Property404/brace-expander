@@ -136,10 +136,10 @@ pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
 }
 
 impl BraceExpander {
-    /// Ignore parse failures instead of erroring out, making `expand()` infallible. This is how
-    /// Bash behaves.
+    /// Ignore parse failures instead of erroring out, making the parsing stage infallible. This is
+    /// how Bash behaves.
     ///
-    /// The default is `false`
+    /// Default: `false`
     pub fn ignore_parse_failures(mut self, ignore_parse_failures: bool) -> Self {
         self.options.strict = !ignore_parse_failures;
         self
@@ -148,7 +148,7 @@ impl BraceExpander {
     /// Expand a string
     pub fn expand(&self, input: &str) -> Result<Vec<String>, Error> {
         let mut expansions = Vec::new();
-        let tokens_barrel = tokenizer::tokenize(input);
+        let tokens_barrel = tokenizer::tokenize(input)?;
         let tokens_barrel = tokens_barrel.split(|token| token.kind == TokenKind::Whitespace);
 
         for tokens in tokens_barrel {
@@ -232,6 +232,8 @@ mod tests {
             "{a,b}{c,d}{e,f}",
             &["ace", "acf", "ade", "adf", "bce", "bcf", "bde", "bdf"],
         );
+        test_tv(&be, "\\{a,b}", &["{a,b}"]);
+        test_tv(&be, "\\\\", &["\\"]);
     }
 
     #[test]
@@ -296,7 +298,7 @@ mod tests {
             let string = build_fuzzy_string(&mut rng);
 
             // BraceExpander in loose mood shouldn't error at all, even on garbage
-            if let Err(err) = loose_be.expand(&string) {
+            if let Err(err @ Error::ParserError { .. }) = loose_be.expand(&string) {
                 panic!("Unexpected error on `{string}`: {err}");
             }
 

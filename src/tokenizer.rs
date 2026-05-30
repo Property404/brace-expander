@@ -1,3 +1,7 @@
+use core::fmt;
+
+use crate::error::Error;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum TokenKind {
     Start,
@@ -6,6 +10,46 @@ pub(crate) enum TokenKind {
     Ellipses,
     Whitespace,
     Text,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub(crate) struct EscapeStr<'a>(&'a str);
+
+impl<'a> EscapeStr<'a> {
+    pub(crate) fn raw(&self) -> &'a str {
+        self.0
+    }
+
+    pub(crate) fn chars(&self) -> impl Iterator<Item = char> {
+        let mut escaped = false;
+        self.0.chars().filter(move |c| {
+            if escaped {
+                escaped = false;
+                true
+            } else if *c == '\\' {
+                escaped = true;
+                false
+            } else {
+                true
+            }
+        })
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.chars().count()
+    }
+}
+
+impl<'a> fmt::Display for EscapeStr<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", String::from(*self))
+    }
+}
+
+impl<'a> From<EscapeStr<'a>> for String {
+    fn from(value: EscapeStr<'a>) -> Self {
+        value.chars().collect()
+    }
 }
 
 #[derive(Debug)]
@@ -18,7 +62,7 @@ struct PartialToken {
 pub(crate) struct Token<'a> {
     pub kind: TokenKind,
     pub pos: usize,
-    pub span: &'a str,
+    pub span: EscapeStr<'a>,
 }
 
 impl PartialToken {
@@ -27,12 +71,12 @@ impl PartialToken {
         Token {
             kind: self.kind,
             pos: self.pos,
-            span: &span[self.pos..end],
+            span: EscapeStr(&span[self.pos..end]),
         }
     }
 }
 
-pub(crate) fn tokenize<'a>(input: &'a str) -> Vec<Token<'a>> {
+pub(crate) fn tokenize<'a>(input: &'a str) -> Result<Vec<Token<'a>>, Error> {
     let mut tokens = Vec::<Token>::new();
     let mut token: Option<PartialToken> = None;
     let mut brace_stack: u32 = 0;
@@ -48,7 +92,7 @@ pub(crate) fn tokenize<'a>(input: &'a str) -> Vec<Token<'a>> {
                 tokens.push(Token {
                     kind: TokenKind::Start,
                     pos,
-                    span: &input[pos..pos + 1],
+                    span: EscapeStr(&input[pos..pos + 1]),
                 });
             }
             b'}' => {
@@ -59,7 +103,7 @@ pub(crate) fn tokenize<'a>(input: &'a str) -> Vec<Token<'a>> {
                 tokens.push(Token {
                     kind: TokenKind::End,
                     pos,
-                    span: &input[pos..pos + 1],
+                    span: EscapeStr(&input[pos..pos + 1]),
                 });
             }
             b',' if brace_stack > 0 => {
@@ -69,7 +113,7 @@ pub(crate) fn tokenize<'a>(input: &'a str) -> Vec<Token<'a>> {
                 tokens.push(Token {
                     kind: TokenKind::Comma,
                     pos,
-                    span: &input[pos..pos + 1],
+                    span: EscapeStr(&input[pos..pos + 1]),
                 });
             }
             b'.' if brace_stack > 0
@@ -82,7 +126,7 @@ pub(crate) fn tokenize<'a>(input: &'a str) -> Vec<Token<'a>> {
                 tokens.push(Token {
                     kind: TokenKind::Ellipses,
                     pos,
-                    span: &input[pos..pos + 2],
+                    span: EscapeStr(&input[pos..pos + 2]),
                 });
             }
             b'\n' | b'\t' | b' ' | b'\r' => {
@@ -98,8 +142,8 @@ pub(crate) fn tokenize<'a>(input: &'a str) -> Vec<Token<'a>> {
             }
             _ => {
                 // Backslash escapes so we skip interpreting the next char
-                if c == b'\\' {
-                    bytes.next();
+                if c == b'\\' && bytes.next().is_none() {
+                    return Err(Error::IncompleteEscape);
                 }
                 if let Some(token) = token.take_if(|token| token.kind != TokenKind::Text) {
                     tokens.push(token.with_span(input, pos));
@@ -113,9 +157,20 @@ pub(crate) fn tokenize<'a>(input: &'a str) -> Vec<Token<'a>> {
             }
         }
     }
+
     if let Some(token) = token.take() {
         tokens.push(token.with_span(input, input.len()));
     }
 
-    tokens
+    Ok(tokens)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn escape_backslashes() {
+        assert_eq!(EscapeStr("he\\llo").to_string(), "hello");
+        assert_eq!(EscapeStr("he\\\\llo").to_string(), "he\\llo");
+    }
 }

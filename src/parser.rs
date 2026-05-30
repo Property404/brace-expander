@@ -23,7 +23,7 @@ pub(crate) enum AstToken {
 }
 
 fn parse_as_char_or_int<'a>(token: &Token<'a>) -> Result<Either<u8, (usize, i32)>, Error> {
-    if let Ok(number) = token.span.parse::<i32>() {
+    if let Ok(number) = token.span.raw().parse::<i32>() {
         return Ok(Either::Right((
             token
                 .span
@@ -61,6 +61,7 @@ fn parse_numeric_expansion<'a>(tokens: Vec<Token<'a>>) -> Result<AstToken, Error
         .map(|token| {
             token
                 .span
+                .raw()
                 .parse::<i16>()
                 .map_err(|_| {
                     Error::with_context("Ellipses expansion step-by must be an integer", token)
@@ -170,7 +171,7 @@ fn parse_expansion<'a>(
             TokenKind::Text | TokenKind::Ellipses => {
                 if let Some(AstToken::Text(last)) = comexp_current.last_mut() {
                     // Merge text
-                    *last += token.span;
+                    last.extend(token.span.chars());
                 } else {
                     comexp_current.push(AstToken::Text(token.span.into()));
                 }
