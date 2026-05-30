@@ -130,7 +130,7 @@ fn parse_expansion<'a>(
                         input = new_input;
                     }
                     Err(err) => {
-                        if options.strict {
+                        if !options.ignore_parse_failures {
                             return Err(err);
                         }
                         unreachable!(
@@ -153,7 +153,7 @@ fn parse_expansion<'a>(
                             return Ok((input, val));
                         }
                         Err(err) => {
-                            if options.strict {
+                            if !options.ignore_parse_failures {
                                 return Err(err);
                             }
                         }
@@ -192,7 +192,7 @@ fn parse_expansion<'a>(
             }
         }
     }
-    if options.strict {
+    if !options.ignore_parse_failures {
         return Err(Error::new("Failed to parse"));
     }
 
@@ -215,10 +215,10 @@ pub(crate) fn parse_section<'a>(
                     input = new_input;
                 }
                 Err(err) => {
-                    if options.strict {
+                    if !options.ignore_parse_failures {
                         return Err(err);
                     }
-                    unreachable!("Inner shouldn't error on non-strict mode");
+                    unreachable!("Inner should be infallible when parse failures are ignored");
                 }
             },
             TokenKind::Whitespace => {

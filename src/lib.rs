@@ -55,12 +55,14 @@ use parser::AstToken;
 
 #[derive(Debug, Clone)]
 struct Options {
-    strict: bool,
+    ignore_parse_failures: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { strict: true }
+        Self {
+            ignore_parse_failures: false,
+        }
     }
 }
 
@@ -141,7 +143,7 @@ impl BraceExpander {
     ///
     /// Default: `false`
     pub fn ignore_parse_failures(mut self, ignore_parse_failures: bool) -> Self {
-        self.options.strict = !ignore_parse_failures;
+        self.options.ignore_parse_failures = ignore_parse_failures;
         self
     }
 
@@ -253,13 +255,13 @@ mod tests {
             ("{,{,{", &["{,{,{"]),
         ];
 
-        // When strict mode is false, we ignore parse failures like bash
+        // Ignore parse failures like bash
         let be = BraceExpander::default().ignore_parse_failures(true);
         for tv in tvs {
             test_tv(&be, tv.0, tv.1);
         }
 
-        // When strict mode is on, we error out
+        // Error out on parse failure
         let be = BraceExpander::default().ignore_parse_failures(false);
         for tv in tvs {
             assert!(be.expand(tv.0).is_err());
