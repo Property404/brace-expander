@@ -4,6 +4,8 @@
 //! [![crates.io](https://img.shields.io/crates/v/brace-expander.svg)](https://crates.io/crates/brace-expander)
 //! [![Documentation](https://docs.rs/brace-expander/badge.svg)](https://docs.rs/brace-expander)
 //!
+//! ## Example
+//!
 //! ```
 //! use brace_expander::BraceExpander;
 //! let be = BraceExpander::default();
