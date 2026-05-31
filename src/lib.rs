@@ -96,28 +96,32 @@ impl Default for BraceExpander {
 }
 
 // Perf: cartesian product is probably the biggest bottleneck
-fn cartesian_product<B>(list_a: Vec<String>, list_b: &[B]) -> Vec<String>
-where
-    B: AsRef<str>,
-{
-    perf("cartesian_product", move || {
-        list_a
-            .into_iter()
-            .flat_map(|s| std::iter::repeat_n(s, list_b.len()).zip(list_b.iter()))
-            .map(|(mut a, b)| {
-                a.push_str(b.as_ref());
-                a
-            })
-            .collect()
+fn multicartesian_product(operands: Vec<Vec<String>>) -> Vec<String> {
+    perf("multicartesian_product", move || {
+        let mut acc: Box<dyn Iterator<Item = String>> = Box::new(std::iter::once(String::new()));
+        for i in 0..operands.len() {
+            acc = Box::new(
+                acc.map(move |s| (s, i))
+                    .flat_map(|(s, i)| {
+                        std::iter::repeat_n(s, operands[i].len()).zip(operands[i].iter())
+                    })
+                    .map(|(mut a, b)| {
+                        a.push_str(b);
+                        a
+                    }),
+            );
+        }
+
+        acc.collect()
     })
 }
 
 pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
-    let mut segments = vec![String::new()];
+    let mut operands: Vec<Vec<String>> = Vec::new();
     for token in input.iter() {
         match token {
             AstToken::Text(text) => {
-                segments = cartesian_product(segments, &[text]);
+                operands.push(vec![text.into()]);
             }
             AstToken::NumericExpansion {
                 start,
@@ -134,7 +138,7 @@ pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
                 .step_by(usize::from(*step))
                 .map(|int| format!("{leading_zeroes}{int}"))
                 .collect::<Vec<_>>();
-                segments = cartesian_product(segments, &range);
+                operands.push(range);
             }
             AstToken::CharExpansion { start, end, step } => {
                 let range = if start <= end {
@@ -148,18 +152,15 @@ pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
                 .map(|c| if c == '\\' { ' ' } else { c })
                 .map(|c| c.to_string())
                 .collect::<Vec<_>>();
-                segments = cartesian_product(segments, &range);
+                operands.push(range);
             }
             AstToken::CommaExpansion(asts) => {
-                segments = cartesian_product(
-                    segments,
-                    &asts.iter().flat_map(|v| expand_ast(v)).collect::<Vec<_>>(),
-                );
+                operands.push(asts.iter().flat_map(|v| expand_ast(v)).collect::<Vec<_>>());
             }
         }
     }
 
-    segments
+    multicartesian_product(operands)
 }
 
 impl BraceExpander {
