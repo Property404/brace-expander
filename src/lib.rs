@@ -116,12 +116,12 @@ fn multicartesian_product(operands: Vec<Vec<String>>) -> Vec<String> {
     })
 }
 
-pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
+pub(crate) fn expand_ast(input: Vec<AstToken>) -> Vec<String> {
     let mut operands: Vec<Vec<String>> = Vec::new();
-    for token in input.iter() {
+    for token in input.into_iter() {
         match token {
             AstToken::Text(text) => {
-                operands.push(vec![text.into()]);
+                operands.push(vec![text]);
             }
             AstToken::NumericExpansion {
                 start,
@@ -129,24 +129,24 @@ pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
                 step,
                 leading_zeros,
             } => {
-                let leading_zeroes = "0".repeat(*leading_zeros);
+                let leading_zeroes = "0".repeat(leading_zeros);
                 let range = if start <= end {
-                    Either::Left(*start..=*end)
+                    Either::Left(start..=end)
                 } else {
-                    Either::Right((*end..=*start).rev())
+                    Either::Right((end..=start).rev())
                 }
-                .step_by(usize::from(*step))
+                .step_by(usize::from(step))
                 .map(|int| format!("{leading_zeroes}{int}"))
                 .collect::<Vec<_>>();
                 operands.push(range);
             }
             AstToken::CharExpansion { start, end, step } => {
                 let range = if start <= end {
-                    Either::Left(*start..=*end)
+                    Either::Left(start..=end)
                 } else {
-                    Either::Right((*end..=*start).rev())
+                    Either::Right((end..=start).rev())
                 }
-                .step_by(usize::from(*step))
+                .step_by(usize::from(step))
                 .map(char::from)
                 // Bash replaces backslash with space in char expansions
                 .map(|c| if c == '\\' { ' ' } else { c })
@@ -155,7 +155,7 @@ pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
                 operands.push(range);
             }
             AstToken::CommaExpansion(asts) => {
-                operands.push(asts.iter().flat_map(|v| expand_ast(v)).collect::<Vec<_>>());
+                operands.push(asts.into_iter().flat_map(expand_ast).collect::<Vec<_>>());
             }
         }
     }
@@ -225,7 +225,7 @@ impl BraceExpander {
                 })?;
                 // Perf note: expansion takes MUCH longer than tokenization or parsing
                 // Start here for perf improvements
-                let mut expansion = perf("Expansion", || expand_ast(&ast));
+                let mut expansion = perf("Expansion", || expand_ast(ast));
                 perf("Extension", || {
                     if expansions.is_empty() {
                         // Optimization: extend() can take a significant amount of time
