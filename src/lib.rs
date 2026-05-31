@@ -105,7 +105,7 @@ where
             .into_iter()
             .flat_map(|s| std::iter::repeat_n(s, list_b.len()).zip(list_b.iter()))
             .map(|(mut a, b)| {
-                a += b.as_ref();
+                a.push_str(b.as_ref());
                 a
             })
             .collect()
