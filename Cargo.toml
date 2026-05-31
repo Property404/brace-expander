@@ -11,6 +11,10 @@ edition = "2024"
 [dependencies]
 either = "1.16.0"
 
+[features]
+# Print out how long some functions take
+_perflog = []
+
 [dev-dependencies]
 bracoxide = "0.1.8"
 criterion = "0.8.2"

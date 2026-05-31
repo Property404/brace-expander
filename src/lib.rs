@@ -53,6 +53,21 @@ use tokenizer::{Token, TokenKind};
 mod parser;
 use parser::AstToken;
 
+// Log the time a block takes
+fn perf<T>(_msg: &str, block: impl FnOnce() -> T) -> T {
+    #[cfg(feature = "_perflog")]
+    {
+        let start = std::time::Instant::now();
+        let val = block();
+        eprintln!("{_msg}: {:?}", std::time::Instant::now() - start);
+        val
+    }
+    #[cfg(not(feature = "_perflog"))]
+    {
+        block()
+    }
+}
+
 #[derive(Clone, Debug)]
 struct Options {
     ignore_parse_failures: bool,
@@ -85,14 +100,16 @@ fn cartesian_product<B>(list_a: Vec<String>, list_b: &[B]) -> Vec<String>
 where
     B: AsRef<str>,
 {
-    list_a
-        .into_iter()
-        .flat_map(|s| std::iter::repeat_n(s, list_b.len()).zip(list_b.iter()))
-        .map(|(mut a, b)| {
-            a += b.as_ref();
-            a
-        })
-        .collect()
+    perf("cartesian_product", move || {
+        list_a
+            .into_iter()
+            .flat_map(|s| std::iter::repeat_n(s, list_b.len()).zip(list_b.iter()))
+            .map(|(mut a, b)| {
+                a += b.as_ref();
+                a
+            })
+            .collect()
+    })
 }
 
 pub(crate) fn expand_ast(input: &[AstToken]) -> Vec<String> {
@@ -202,10 +219,21 @@ impl BraceExpander {
 
         for tokens in tokens_barrel {
             if !tokens.is_empty() {
-                let ast = parser::parse_section(tokens, &self.options)?;
+                let ast = perf("Parsing", move || {
+                    parser::parse_section(tokens, &self.options)
+                })?;
                 // Perf note: expansion takes MUCH longer than tokenization or parsing
                 // Start here for perf improvements
-                expansions.extend(expand_ast(&ast));
+                let mut expansion = perf("Expansion", || expand_ast(&ast));
+                perf("Extension", || {
+                    if expansions.is_empty() {
+                        // Optimization: extend() can take a significant amount of time
+                        // (300ms in the test I was doing)
+                        std::mem::swap(&mut expansions, &mut expansion);
+                    } else {
+                        expansions.extend(expansion)
+                    }
+                });
             }
         }
 
