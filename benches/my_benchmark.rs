@@ -1,4 +1,5 @@
 use brace_expander::BraceExpander;
+use brace_expander_old::BraceExpander as OldBraceExpander;
 use bracoxide::{self, bracoxidize};
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
@@ -8,6 +9,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("Multiexpand", |b| {
         b.iter(|| BraceExpander::new().expand(multiexpand).unwrap())
     });
+    c.bench_function("Multiexpand(old version)", |b| {
+        b.iter(|| OldBraceExpander::new().expand(multiexpand).unwrap())
+    });
     c.bench_function("Multiexpand(bracoxide cmp)", |b| {
         b.iter(|| bracoxidize(multiexpand).unwrap())
     });
@@ -15,6 +19,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     let simple = black_box("{a,b}");
     c.bench_function("Simple", |b| {
         b.iter(|| BraceExpander::new().expand(simple).unwrap())
+    });
+    c.bench_function("Simple(old version)", |b| {
+        b.iter(|| OldBraceExpander::new().expand(simple).unwrap())
     });
     c.bench_function("Simple(bracoxide cmp)", |b| {
         b.iter(|| bracoxidize(simple).unwrap())
