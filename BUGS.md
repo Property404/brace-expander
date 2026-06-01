@@ -11,9 +11,9 @@
 BraceExpander strives for (at least optional) compatibility with Bash, but
 there are some differences
 
-* `{},}` and `{},}text` by itself will not resolve on either Bash nor
-  BraceExpander. Bash will, however, expand `text{},}` This seems niche and I
-  don't really understand Bash's parsing logic here
+* `{},}` and `{},}text` will resolve on neither Bash nor BraceExpander.
+  Bash will, however, expand `text{},}`. This seems niche and I don't really
+  understand Bash's parsing logic here
 * BraceExpander doesn't see padding if a minus sign is in front
   Bash: `{-02..2}` => `-02 -01 000 001 002`
   Brace Expander: `{-02..2}` -> `-2 -1 0 1 2`
