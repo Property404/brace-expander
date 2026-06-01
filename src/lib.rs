@@ -116,6 +116,21 @@ fn multicartesian_product(operands: Vec<Vec<String>>) -> Vec<String> {
     })
 }
 
+// This is faster than using `format!`
+// Matters a bit when using very large ranges like {1..1000000}
+fn left_pad(num: i32, width: usize) -> String {
+    let num = num.to_string();
+
+    if num.len() >= width {
+        return num;
+    }
+
+    let mut padded = String::with_capacity(width);
+    padded.extend(std::iter::repeat('0').take(width - num.len()));
+    padded.push_str(&num);
+    padded
+}
+
 pub(crate) fn expand_ast(input: Vec<AstToken>) -> Vec<String> {
     let mut operands: Vec<Vec<String>> = Vec::new();
     for token in input.into_iter() {
@@ -129,7 +144,7 @@ pub(crate) fn expand_ast(input: Vec<AstToken>) -> Vec<String> {
                 step,
                 leading_zeros,
             } => {
-                let leading_zeros = leading_zeros + 1;
+                let min_width = leading_zeros + 1;
                 let range = perf("Range build", move || {
                     if start <= end {
                         Either::Left(start..=end)
@@ -137,7 +152,7 @@ pub(crate) fn expand_ast(input: Vec<AstToken>) -> Vec<String> {
                         Either::Right((end..=start).rev())
                     }
                     .step_by(usize::from(step))
-                    .map(|int| format!("{int:0leading_zeros$}"))
+                    .map(|int| left_pad(int, min_width))
                     .collect::<Vec<_>>()
                 });
                 operands.push(range);
