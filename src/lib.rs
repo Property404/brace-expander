@@ -129,15 +129,17 @@ pub(crate) fn expand_ast(input: Vec<AstToken>) -> Vec<String> {
                 step,
                 leading_zeros,
             } => {
-                let leading_zeroes = "0".repeat(leading_zeros);
-                let range = if start <= end {
-                    Either::Left(start..=end)
-                } else {
-                    Either::Right((end..=start).rev())
-                }
-                .step_by(usize::from(step))
-                .map(|int| format!("{leading_zeroes}{int}"))
-                .collect::<Vec<_>>();
+                let leading_zeros = leading_zeros + 1;
+                let range = perf("Range build", move || {
+                    if start <= end {
+                        Either::Left(start..=end)
+                    } else {
+                        Either::Right((end..=start).rev())
+                    }
+                    .step_by(usize::from(step))
+                    .map(|int| format!("{int:0leading_zeros$}"))
+                    .collect::<Vec<_>>()
+                });
                 operands.push(range);
             }
             AstToken::CharExpansion { start, end, step } => {
@@ -310,6 +312,7 @@ mod tests {
         test_tv(&be, "{-1..1}", &["-1", "0", "1"]);
         test_tv(&be, "{1..-1}", &["1", "0", "-1"]);
         test_tv(&be, "{-1..+1}", &["-1", "0", "1"]);
+        test_tv(&be, "{09..10}", &["09", "10"]);
         test_tv(
             &be,
             "{a,b}{c,d}{e,f}",
