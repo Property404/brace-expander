@@ -116,21 +116,6 @@ fn multicartesian_product(operands: Vec<Vec<String>>) -> Vec<String> {
     })
 }
 
-// This is faster than using `format!`
-// Matters a bit when using very large ranges like {1..1000000}
-fn left_pad(num: i32, width: usize) -> String {
-    let num = num.to_string();
-
-    if num.len() >= width {
-        return num;
-    }
-
-    let mut padded = String::with_capacity(width);
-    padded.extend(std::iter::repeat_n('0', width - num.len()));
-    padded.push_str(&num);
-    padded
-}
-
 pub(crate) fn expand_ast(input: Vec<AstToken>) -> Vec<String> {
     let mut operands: Vec<Vec<String>> = Vec::new();
     for token in input.into_iter() {
@@ -144,7 +129,6 @@ pub(crate) fn expand_ast(input: Vec<AstToken>) -> Vec<String> {
                 step,
                 leading_zeros,
             } => {
-                let min_width = leading_zeros + 1;
                 let range = perf("Range build", move || {
                     if start <= end {
                         Either::Left(start..=end)
@@ -152,7 +136,13 @@ pub(crate) fn expand_ast(input: Vec<AstToken>) -> Vec<String> {
                         Either::Right((end..=start).rev())
                     }
                     .step_by(usize::from(step))
-                    .map(|int| left_pad(int, min_width))
+                    .map(|num| {
+                        if leading_zeros == 0 {
+                            // format!'s kind of slow, so take a short cut
+                            return num.to_string();
+                        }
+                        format!("{num:0width$}", width = leading_zeros + 1)
+                    })
                     .collect::<Vec<_>>()
                 });
                 operands.push(range);
@@ -328,6 +318,7 @@ mod tests {
         test_tv(&be, "{1..-1}", &["1", "0", "-1"]);
         test_tv(&be, "{-1..+1}", &["-1", "0", "1"]);
         test_tv(&be, "{09..10}", &["09", "10"]);
+        test_tv(&be, "{-1..001}", &["-01", "000", "001"]);
         test_tv(
             &be,
             "{a,b}{c,d}{e,f}",

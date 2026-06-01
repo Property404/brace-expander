@@ -1,9 +1,5 @@
 # Bugs
 
-## General
-
-* BraceExpander incorrectly expands `{-1..001}` to `0-1 000 001`
-
 ## Performance bugs
 
 * The parsing stage is very slow on inputs like `{{{{{{{{{{{{{{{{{{{{{{{{{{{{{`
