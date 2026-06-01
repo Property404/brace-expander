@@ -126,7 +126,7 @@ fn left_pad(num: i32, width: usize) -> String {
     }
 
     let mut padded = String::with_capacity(width);
-    padded.extend(std::iter::repeat('0').take(width - num.len()));
+    padded.extend(std::iter::repeat_n('0', width - num.len()));
     padded.push_str(&num);
     padded
 }
