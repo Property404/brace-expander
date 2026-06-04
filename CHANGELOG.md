@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Perf improvements
 - Fixed bug where leading zeros would ALWAYS be prepended
+- `{{1..{2},}` now behaves like bash when parsing failures are allowed
 
 ## [0.0.2] - 2026-05-30
 

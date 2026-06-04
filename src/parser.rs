@@ -108,26 +108,29 @@ fn parse_numeric_expansion<'a>(tokens: Vec<Token<'a>>) -> Result<AstToken, Error
 fn parse_expansion<'a>(
     mut input: &'a [Token<'a>],
     options: &Options,
-) -> Result<(&'a [Token<'a>], AstToken), Error> {
+) -> Result<(&'a [Token<'a>], String, AstToken), Error> {
     let original_input = input;
     let mut can_be_numeric = true;
     let mut found_comma = false;
     let mut numexp_ast = Vec::<Token>::new();
     let mut numexp_current: Option<&Token> = None;
+    let mut text = String::from("{");
 
     let mut comexp_ast = Vec::<Vec<AstToken>>::new();
     let mut comexp_current = Vec::<AstToken>::new();
 
     while let Some(token) = input.first() {
         input = &input[1..];
+        text += &token.span.to_string();
 
         match token.kind {
             TokenKind::Start => {
                 can_be_numeric = false;
                 match parse_expansion(input, options) {
-                    Ok((new_input, new_ast)) => {
+                    Ok((new_input, new_text, new_ast)) => {
                         comexp_current.push(new_ast);
                         input = new_input;
+                        text += &new_text[1..];
                     }
                     Err(err) => {
                         if !options.ignore_parse_failures {
@@ -142,7 +145,7 @@ fn parse_expansion<'a>(
             TokenKind::End => {
                 if found_comma {
                     comexp_ast.push(comexp_current);
-                    return Ok((input, AstToken::CommaExpansion(comexp_ast)));
+                    return Ok((input, text, AstToken::CommaExpansion(comexp_ast)));
                 }
                 if let Some(token) = numexp_current.take() {
                     numexp_ast.push(token.clone());
@@ -150,7 +153,7 @@ fn parse_expansion<'a>(
                 if can_be_numeric {
                     match parse_numeric_expansion(numexp_ast) {
                         Ok(val) => {
-                            return Ok((input, val));
+                            return Ok((input, text, val));
                         }
                         Err(err) => {
                             if !options.ignore_parse_failures {
@@ -158,6 +161,9 @@ fn parse_expansion<'a>(
                             }
                         }
                     }
+                }
+                if options.ignore_parse_failures {
+                    return Ok((input, text.clone(), AstToken::Text(text)));
                 }
                 break;
             }
@@ -196,7 +202,7 @@ fn parse_expansion<'a>(
         return Err(Error::new("Failed to parse"));
     }
 
-    Ok((original_input, AstToken::Text("{".into())))
+    Ok((original_input, text, AstToken::Text("{".into())))
 }
 
 // Parse section without whitespace
@@ -210,7 +216,7 @@ pub(crate) fn parse_section<'a>(
 
         match token.kind {
             TokenKind::Start => match parse_expansion(input, options) {
-                Ok((new_input, ast_token)) => {
+                Ok((new_input, _, ast_token)) => {
                     ast.push(ast_token);
                     input = new_input;
                 }
