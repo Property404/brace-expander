@@ -124,7 +124,7 @@ fn parse_expansion<'a>(
         text += &token.span.to_string();
 
         match token.kind {
-            TokenKind::Start => {
+            TokenKind::Start { end: Some(_) } => {
                 can_be_numeric = false;
                 match parse_expansion(input, options) {
                     Ok((new_input, new_text, new_ast)) => {
@@ -174,7 +174,7 @@ fn parse_expansion<'a>(
                 std::mem::swap(&mut swap, &mut comexp_current);
                 comexp_ast.push(swap);
             }
-            TokenKind::Text | TokenKind::Ellipses => {
+            TokenKind::Text | TokenKind::Ellipses | TokenKind::Start { end: None } => {
                 if let Some(AstToken::Text(last)) = comexp_current.last_mut() {
                     // Merge text
                     last.extend(token.span.chars());
@@ -215,7 +215,7 @@ pub(crate) fn parse_section<'a>(
         input = &input[1..];
 
         match token.kind {
-            TokenKind::Start => match parse_expansion(input, options) {
+            TokenKind::Start { end: Some(_) } => match parse_expansion(input, options) {
                 Ok((new_input, _, ast_token)) => {
                     ast.push(ast_token);
                     input = new_input;

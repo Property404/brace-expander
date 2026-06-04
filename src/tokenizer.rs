@@ -4,7 +4,7 @@ use crate::{Options, error::Error};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum TokenKind {
-    Start,
+    Start { end: Option<usize> },
     End,
     Comma,
     Ellipses,
@@ -89,7 +89,7 @@ impl PartialToken {
 pub(crate) fn tokenize<'a>(input: &'a str, options: &Options) -> Result<Vec<Token<'a>>, Error> {
     let mut tokens = Vec::<Token>::new();
     let mut token: Option<PartialToken> = None;
-    let mut brace_stack: u32 = 0;
+    let mut brace_stack: Vec<usize> = Vec::new();
 
     let mut bytes = input.bytes().enumerate().peekable();
     while let Some((pos, c)) = bytes.next() {
@@ -98,9 +98,9 @@ pub(crate) fn tokenize<'a>(input: &'a str, options: &Options) -> Result<Vec<Toke
                 if let Some(token) = token.take() {
                     tokens.push(token.with_span(input, pos, options));
                 }
-                brace_stack += 1;
+                brace_stack.push(tokens.len());
                 tokens.push(Token {
-                    kind: TokenKind::Start,
+                    kind: TokenKind::Start { end: None },
                     pos,
                     span: EscapeStr::new(&input[pos..pos + 1], options),
                 });
@@ -109,14 +109,24 @@ pub(crate) fn tokenize<'a>(input: &'a str, options: &Options) -> Result<Vec<Toke
                 if let Some(token) = token.take() {
                     tokens.push(token.with_span(input, pos, options));
                 }
-                brace_stack = brace_stack.saturating_sub(1);
+                if let Some(start_pos) = brace_stack.pop() {
+                    let len = tokens.len();
+                    assert!(start_pos < tokens.len());
+                    if let Some(Token {
+                        kind: TokenKind::Start { end },
+                        ..
+                    }) = tokens.get_mut(start_pos)
+                    {
+                        *end = Some(len);
+                    }
+                }
                 tokens.push(Token {
                     kind: TokenKind::End,
                     pos,
                     span: EscapeStr::new(&input[pos..pos + 1], options),
                 });
             }
-            b',' if brace_stack > 0 => {
+            b',' if !brace_stack.is_empty() => {
                 if let Some(token) = token.take() {
                     tokens.push(token.with_span(input, pos, options));
                 }
@@ -126,7 +136,7 @@ pub(crate) fn tokenize<'a>(input: &'a str, options: &Options) -> Result<Vec<Toke
                     span: EscapeStr::new(&input[pos..pos + 1], options),
                 });
             }
-            b'.' if brace_stack > 0
+            b'.' if !brace_stack.is_empty()
                 && let Some((_, b'.')) = bytes.peek() =>
             {
                 bytes.next();
@@ -170,6 +180,18 @@ pub(crate) fn tokenize<'a>(input: &'a str, options: &Options) -> Result<Vec<Toke
 
     if let Some(token) = token.take() {
         tokens.push(token.with_span(input, input.len(), options));
+    }
+
+    // Ok, yes, technically this is the tokenizer. But this was previously reported in the parser
+    // so whatever, I don't care. It's a parse error. Fuck you
+    if !options.ignore_parse_failures
+        && let Some(idx) = brace_stack.pop()
+        && let Some(token) = tokens.get(idx)
+    {
+        return Err(Error::with_context(
+            "Start bracket is missing end bracket",
+            token,
+        ));
     }
 
     Ok(tokens)

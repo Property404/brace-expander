@@ -1,10 +1,8 @@
 # Bugs
 
-## Performance bugs
+## Design
 
-* The parsing stage is very slow on inputs like `{{{{{{{{{{{{{{{{{{{{{{{{{{{{{`
-   * Requires `2^n - 1` calls to `parse_expansion`
-   * Recursion depth is another factor to consider
+* Parsing stage is recursive, this should probably be refactored
 
 ## Differences from Bash
 
