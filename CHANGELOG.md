@@ -11,11 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `{{1..{2},}` now behaves like bash when parsing failures are allowed
+- `-01` is now interpreted to be a padded number
+
 ### Fixed
 
 - Perf improvements
 - Fixed bug where leading zeros would ALWAYS be prepended
-- `{{1..{2},}` now behaves like bash when parsing failures are allowed
 
 ## [0.0.2] - 2026-05-30
 

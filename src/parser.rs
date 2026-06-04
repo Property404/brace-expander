@@ -24,15 +24,20 @@ pub(crate) enum AstToken {
 
 fn parse_as_char_or_int<'a>(token: &Token<'a>) -> Result<Either<u8, (usize, i32)>, Error> {
     if let Ok(number) = token.span.raw().parse::<i32>() {
-        return Ok(Either::Right((
+        // A bit complicated to cover some edge cases:
+        //  In bash, padded numbers can start with `-` if followed by a zero
+        let padding = if token.span.raw().starts_with("0") || token.span.raw().starts_with("-0") {
             token
                 .span
                 .chars()
+                // We don't count the final digit because otherwise `0` is interpreted as padded
                 .take(token.span.len() - 1)
-                .take_while(|c| *c == '0')
-                .count(),
-            number,
-        )));
+                .take_while(|c| *c == '0' || *c == '-')
+                .count()
+        } else {
+            0
+        };
+        return Ok(Either::Right((padding, number)));
     }
     if token.span.len() == 1
         && let Some(Ok(c)) = token.span.chars().next().map(u8::try_from)
