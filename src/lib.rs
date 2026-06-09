@@ -125,7 +125,8 @@ impl McIterator {
 impl Iterator for McIterator {
     type Item = String;
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.max, Some(self.max))
+        let size = self.max - self.idx;
+        (size, Some(size))
     }
 
     fn next(&mut self) -> Option<Self::Item> {
