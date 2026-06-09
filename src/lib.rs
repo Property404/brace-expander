@@ -45,6 +45,8 @@
 //! Pull requests encouraged
 #![warn(missing_docs)]
 #![forbid(unsafe_code)]
+use std::iter::FusedIterator;
+
 use either::Either;
 mod error;
 use error::Error;
@@ -95,28 +97,72 @@ impl Default for BraceExpander {
     }
 }
 
-// Perf: cartesian product is probably the biggest bottleneck
-fn multicartesian_product(operands: Vec<Vec<String>>) -> Vec<String> {
-    perf("multicartesian_product", move || {
-        let mut acc: Box<dyn Iterator<Item = String>> = Box::new(std::iter::once(String::new()));
-        for i in 0..operands.len() {
-            acc = Box::new(
-                acc.map(move |s| (s, i))
-                    .flat_map(|(s, i)| {
-                        std::iter::repeat_n(s, operands[i].len()).zip(operands[i].iter())
-                    })
-                    .map(|(mut a, b)| {
-                        a.push_str(b);
-                        a
-                    }),
-            );
-        }
-
-        acc.collect()
-    })
+struct McIterator {
+    operands: Vec<Vec<String>>,
+    divs: Vec<usize>,
+    idx: usize,
+    max: usize,
 }
 
-pub(crate) fn expand_ast(input: Vec<AstToken>) -> Vec<String> {
+impl McIterator {
+    fn new(operands: Vec<Vec<String>>) -> Self {
+        let mut divs = vec![55; operands.len()];
+        let mut max = 1;
+        for (idx, op) in operands.iter().enumerate().rev() {
+            max *= op.len();
+            divs[idx] = operands.get(idx + 1).map(|v| v.len()).unwrap_or(1)
+                * divs.get(idx + 1).unwrap_or(&1usize);
+        }
+        Self {
+            operands,
+            divs,
+            idx: 0,
+            max,
+        }
+    }
+}
+
+impl Iterator for McIterator {
+    type Item = String;
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.max, Some(self.max))
+    }
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx >= self.max {
+            self.operands.clear();
+            self.divs.clear();
+            return None;
+        }
+
+        debug_assert!(self.divs.len() == self.operands.len());
+
+        // Optimization: getting the capacity first improves performance by a good amount
+        let capacity = self
+            .operands
+            .iter()
+            .zip(self.divs.iter())
+            .fold(0usize, |acc, (operand, div)| {
+                acc + operand[(self.idx / div) % operand.len()].len()
+            });
+
+        let x = self.operands.iter().zip(self.divs.iter()).fold(
+            String::with_capacity(capacity),
+            |mut acc, (operand, div)| {
+                acc.push_str(&operand[(self.idx / div) % operand.len()]);
+                acc
+            },
+        );
+
+        self.idx += 1;
+        Some(x)
+    }
+}
+
+impl FusedIterator for McIterator {}
+impl ExactSizeIterator for McIterator {}
+
+pub(crate) fn expand_ast(input: Vec<AstToken>) -> McIterator {
     let mut operands: Vec<Vec<String>> = Vec::new();
     for token in input.into_iter() {
         match token {
@@ -167,7 +213,7 @@ pub(crate) fn expand_ast(input: Vec<AstToken>) -> Vec<String> {
         }
     }
 
-    multicartesian_product(operands)
+    McIterator::new(operands)
 }
 
 impl BraceExpander {
@@ -232,15 +278,9 @@ impl BraceExpander {
                 })?;
                 // Perf note: expansion takes MUCH longer than tokenization or parsing
                 // Start here for perf improvements
-                let mut expansion = perf("Expansion", || expand_ast(ast));
-                perf("Extension", || {
-                    if expansions.is_empty() {
-                        // Optimization: extend() can take a significant amount of time
-                        // (300ms in the test I was doing)
-                        std::mem::swap(&mut expansions, &mut expansion);
-                    } else {
-                        expansions.extend(expansion)
-                    }
+                perf("Expansion", || {
+                    let expansion = expand_ast(ast);
+                    expansions.extend(expansion)
                 });
             }
         }
