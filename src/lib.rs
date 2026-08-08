@@ -106,7 +106,7 @@ struct McIterator {
 
 impl McIterator {
     fn new(operands: Vec<Vec<String>>) -> Self {
-        let mut divs = vec![55; operands.len()];
+        let mut divs = vec![0; operands.len()];
         let mut max = 1;
         for (idx, op) in operands.iter().enumerate().rev() {
             max *= op.len();
