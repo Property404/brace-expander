@@ -52,22 +52,22 @@ checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
 
 [[package]]
 name = "brace-expander"
-version = "0.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cc33130261e10fdf60ea5460862921f5290b9bdc09e3ec0967558097f7350de"
+version = "0.0.3"
 dependencies = [
+ "brace-expander 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bracoxide",
+ "criterion",
  "either",
+ "rand",
 ]
 
 [[package]]
 name = "brace-expander"
 version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf82cf4377678f6be149a38242fbca81110fd45e797c47ac0a2055183efd2972"
 dependencies = [
- "brace-expander 0.0.2",
- "bracoxide",
- "criterion",
  "either",
- "rand",
 ]
 
 [[package]]
